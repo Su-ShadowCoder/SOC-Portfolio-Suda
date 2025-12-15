@@ -1,0 +1,112 @@
+# 🔒 SIEM LAB SETUP M-SENTINEL
+# Goal: Connect a local Ubuntu VM (Log Source) to a free-tier Azure Sentinel Workspace (SIEM)
+# Estimated Setup Time: 1 - 2 Hours
+
+################################################################################
+# PHASE 1: AZURE PORTAL SETUP (The Destination)
+# Focus: Create the Log Analytics Workspace and enable Sentinel.
+# Cost Note: Log Analytics offers a free tier (e.g., 5-10 GB/day for the first 31 days or a specific free tier).
+#            Stay below this limit to keep costs minimal/free.
+
+# 1. CREATE LOG ANALYTICS WORKSPACE
+# Action: Log in to Azure Portal.
+# Search: "Log Analytics workspaces"
+# Click: + Create
+#   - Subscription: Select your subscription.
+#   - Resource Group: Create a new one (e.g., RG-SentinelLab).
+#   - Instance Details -> Name: Enter a unique name (e.g., LA-SentinelLab-[YourName]).
+#   - Region: Select a region (e.g., East US).
+#   - Pricing Tier: MUST select Pay-as-you-go or a free tier if available (AVOID Commitment Tiers).
+# Click: Review + Create -> Create.
+
+# 2. ENABLE MICROSOFT SENTINEL
+# Action: Once the Workspace deployment finishes.
+# Search: "Microsoft Sentinel"
+# Click: + Add
+#   - Select your newly created Log Analytics Workspace (LA-SentinelLab-[YourName]).
+# Click: Add. (Sentinel is now enabled on your workspace.)
+
+# 3. CONFIGURE RETENTION (To minimize future cost)
+# Action: Go back to your Log Analytics Workspace.
+# Navigate: Settings -> Tables.
+# Action: For most tables (especially the one that will receive Syslog), set the Data retention to the minimum (e.g., 31 days).
+
+################################################################################
+# PHASE 2: AZURE ARC ONBOARDING (Connecting the Source)
+# Focus: Make your local Ubuntu VM visible and manageable by Azure.
+# Pre-requisite: Your local Ubuntu VM is running and has internet access.
+
+# 4. GENERATE AZURE ARC SCRIPT (On Host Machine/Browser)
+# Action: In the Azure Portal.
+# Search: "Azure Arc"
+# Navigate: Infrastructure -> Servers -> Add / Create -> Add a single server.
+#   - Select the Subscription, Resource Group, and Region used in Step 1.
+#   - Operating system: Select Linux.
+#   - Connectivity method: Public endpoint.
+# Click: Next/Next.
+# Result: Azure generates a Bash script. COPY THE ENTIRE SCRIPT.
+
+# 5. RUN SCRIPT & AUTHORIZE (On Local Ubuntu VM)
+# Action: Open a terminal on your local Ubuntu VM.
+# Command: Paste the entire script block you copied in Step 4 and run it with 'sudo' if necessary.
+#
+# IMPORTANT: The script will pause and ask you to authenticate:
+#   - Message: "To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code [UNIQUE-CODE] to authenticate."
+# Action (Host Machine): Open the URL in your browser, enter the code, and sign in with your Azure account.
+# Verification: The terminal script will complete.
+
+# 6. VERIFY ARC CONNECTION (Azure Portal)
+# Action: Go back to the Azure Portal.
+# Search: "Azure Arc" -> Servers.
+# Verification: Your Ubuntu VM should now appear in the list with the Status column showing "Connected."
+
+################################################################################
+# PHASE 3: AGENT INSTALLATION & LOG FLOW
+# Focus: Install the AMA agent and tell it what logs to collect.
+
+# 7. INSTALL AZURE MONITOR AGENT (AMA)
+# Action: In the Azure Portal, go to your new Arc-enabled server resource.
+# Navigate: Settings -> Extensions.
+# Click: + Add.
+# Search: "Azure Monitor Agent" (AzureMonitorLinuxAgent) and install it.
+# Verification: The extension status should change to "Provisioning succeeded" after a few minutes.
+
+# 8. CREATE DATA COLLECTION RULE (DCR)
+# Action: The DCR tells AMA what to collect.
+# Search: "Data collection rules"
+# Click: + Create.
+#   - Basics: Use the same Subscription, Resource Group, and Region as your Sentinel Workspace.
+#   - Resources: Click + Add resources. Select your Arc-enabled Ubuntu VM.
+#   - Collect and deliver: Click + Add data source.
+#       - Data source type: Linux Syslog.
+#       - Log protocols: Keep the defaults (e.g., UDP/TCP).
+#       - Data destination: Select "Azure Monitor Logs" and choose your LA-SentinelLab Workspace.
+# Click: Review + Create -> Create.
+# Note: This DCR automatically tells the AMA agent on your Ubuntu VM to start collecting Syslog and sending it to your workspace.
+
+################################################################################
+# PHASE 4: VALIDATION AND FIRST QUERY (Ready to Work)
+# Focus: Confirm logs are flowing and start analyzing.
+
+# 9. GENERATE TEST LOGS (On Local Ubuntu VM)
+# Action: Access your Ubuntu terminal and generate some traffic/logs:
+# Command: logger "SENTINEL-TEST-LOG-FLOW"
+# Command: echo "Failed password for user test" | sudo tee -a /var/log/auth.log
+# Note: You can also just try a few intentionally failed SSH logins.
+
+# 10. RUN YOUR FIRST QUERY (Azure Sentinel)
+# Action: Wait 5-10 minutes for the logs to ingest.
+# In the Azure Portal, go to Microsoft Sentinel.
+# Navigate: General -> Logs.
+# Query: Run the following simple KQL queries:
+#
+# Syslog
+# | where TimeGenerated > ago(1h)
+# | limit 50
+#
+# Search: Check for your test log to confirm flow:
+# Syslog
+# | where SysLogMessage contains "SENTINEL-TEST-LOG-FLOW"
+#
+# Result: If you see your logs, your **SIEM lab is fully connected and ready to work!**
+# Reminder: Keep your local Ubuntu VM shut down when not in use to avoid potential minimal costs.

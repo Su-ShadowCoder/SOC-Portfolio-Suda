@@ -1,0 +1,158 @@
+SSH Lab Setup Procedure – SOC Home Lab
+Objective
+
+To configure a VM accessible via SSH from a host machine, allowing the generation of authentication logs for SIEM ingestion, incident simulation, and SOC hands-on exercises.
+
+1. Prerequisites
+
+Host machine with Linux or Windows with an SSH client installed.
+
+VM with Linux (Ubuntu recommended).
+
+Hypervisor: VirtualBox, VMware, or Hyper-V.
+
+Basic knowledge of Linux commands and system administration.
+
+2. Network Setup
+Step 2.1 – Configure VM Network
+
+Goal: Allow SSH connections from the host to VM.
+
+Use Bridged Adapter (preferred) or Host-Only Adapter.
+
+Avoid NAT unless you configure port forwarding.
+
+Why:
+NAT mode prevents direct connections from the host. Bridged/Host-Only ensures VM gets a LAN IP reachable by the host.
+
+Check VM IP:
+
+ip a
+
+
+Look for inet under enp0s3 or similar.
+
+Example: 192.168.2.2/24
+
+3. Install & Enable SSH Server on VM
+Step 3.1 – Install SSH server
+sudo apt update
+sudo apt install openssh-server -y
+
+
+Why:
+SSH server (sshd) is required to accept incoming SSH connections.
+
+Step 3.2 – Enable SSH service
+sudo systemctl enable ssh
+sudo systemctl start ssh
+sudo systemctl status ssh
+
+
+Explanation:
+
+enable → starts SSH on boot.
+
+start → activates it now.
+
+status → verify running.
+
+4. Configure SSH Security (Optional but Recommended)
+Step 4.1 – Edit SSH config
+sudo nano /etc/ssh/sshd_config
+
+
+Key settings:
+
+Setting	Recommended Value	Why
+Port	22	Default SSH port. Can change for obscurity.
+PermitRootLogin	no	Prevent root login for safety.
+PasswordAuthentication	yes	Allows password login for SOC logs.
+PubkeyAuthentication	yes	Enables SSH keys if needed later.
+PermitEmptyPasswords	no	Prevents empty passwords.
+
+After editing:
+
+sudo systemctl daemon-reload
+sudo systemctl restart ssh
+
+5. Test SSH Connection from Host
+ssh username@VM_IP
+
+
+First-time connection: confirm host key (yes).
+
+Enter VM password when prompted.
+
+Expected outcome:
+
+Successful login → generates logs in /var/log/auth.log on VM.
+
+Failed password → also generates logs (useful for SOC testing).
+
+6. Generating Test Logs
+Step 6.1 – Failed login attempts
+ssh username@VM_IP
+# Enter wrong password multiple times
+
+Step 6.2 – Successful login
+ssh username@VM_IP
+# Enter correct password
+
+
+Why:
+Both failed and successful attempts are ingested as log events into SIEM.
+
+7. Host Machine Security
+
+If SSH on the host is not needed:
+
+sudo systemctl stop ssh
+sudo systemctl disable ssh
+systemctl status ssh
+
+
+Why:
+
+Reduces attack surface.
+
+Host can still initiate outbound SSH connections.
+
+8. Verification & Logs
+Step 8.1 – Verify logs on VM
+sudo tail -f /var/log/auth.log
+
+
+Check for entries like:
+
+Accepted password
+
+Failed password
+
+Session opened/closed
+
+Step 8.2 – Test connectivity
+ping VM_IP
+ssh username@VM_IP
+
+
+Why:
+Ensures VM is reachable and SSH logs are being generated correctly.
+
+9. Optional Enhancements
+
+Firewall: Limit SSH to host IP.
+
+Automated log generation: Use a script to simulate repeated logins.
+
+SIEM ingestion: Forward /var/log/auth.log to Microsoft Sentinel or another SIEM.
+
+Notes
+
+Always keep your host SSH disabled if not used for incoming connections.
+
+Use the VM IP for all SSH log generation.
+
+Bridged network simplifies connectivity and reduces troubleshooting.
+
+Logs generated in this setup are suitable for creating incidents, testing analytics rules, and practicing SOC procedures.
